@@ -1913,18 +1913,22 @@ function clampToScreen(char) {
     });
 }
 
-let lastTime = 0;
+let lastTime = performance.now();
 let accumulator = 0;
 const fixedTimeStep = 16.666;
 
 // Main game loop
 function updateGame(timestamp) {
-    if (!lastTime) lastTime = timestamp;
+    if (timestamp === undefined || timestamp === null) {
+        timestamp = performance.now();
+    }
     let dt = timestamp - lastTime;
     lastTime = timestamp;
 
-    // Cap dt to prevent spiral of death during heavy lag spikes
-    if (dt > 100) dt = 16.666;
+    // Protection from spiral of death (limit dt, guard against NaN and negative values)
+    if (dt > 100 || dt < 0 || isNaN(dt)) {
+        dt = 16.666;
+    }
 
     accumulator += dt;
     while (accumulator >= fixedTimeStep) {
