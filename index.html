@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apex Archer: Ragdoll Duel</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts for premium typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <!-- Local Matter.js Physics Engine -->
+    <script src="matter.min.js"></script>
+</head>
+<body>
+    <div id="game-container">
+        <!-- Canvas where Matter.js and custom effects will draw -->
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- Glassmorphic UI overlay -->
+        <div id="ui-overlay">
+            <header>
+                <div class="brand">APEX ARCHER</div>
+                <div class="event-container">
+                    <div id="event-name">ОБЫЧНЫЙ РАУНД</div>
+                    <div id="event-desc">Стандартные условия боя</div>
+                </div>
+                <div class="header-right" style="display: flex; align-items: center; gap: 15px;">
+                    <div class="gold-indicator" style="background: rgba(251, 191, 36, 0.15); border: 1px solid #fbbf24; padding: 6px 14px; border-radius: 20px; display: flex; align-items: center; gap: 6px; font-weight: 800; color: #fbbf24; box-shadow: 0 0 10px rgba(251, 191, 36, 0.2);">
+                        <span>🪙</span>
+                        <span id="gold-value-hud">0</span>
+                    </div>
+                    <div class="wind-indicator">
+                        <span class="wind-label">ВЕТЕР:</span>
+                        <span id="wind-value">0.0 м/с</span>
+                        <div class="wind-arrow-container">
+                            <div id="wind-arrow">➔</div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <div class="scores-container">
+                <div class="score-card player-card">
+                    <span class="label">ИГРОК</span>
+                    <div class="hp-bar-container"><div id="player-hp" class="hp-bar" style="width: 100%;"></div></div>
+                    <span id="player-score" class="score">0</span>
+                </div>
+                <div class="vs">VS</div>
+                <div class="score-card enemy-card">
+                    <span class="label">ПРОТИВНИК</span>
+                    <div class="hp-bar-container"><div id="enemy-hp" class="hp-bar" style="width: 100%;"></div></div>
+                    <span id="enemy-score" class="score">0</span>
+                </div>
+            </div>
+
+            <div id="screen-start" class="screen active">
+                <h1>APEX ARCHER</h1>
+                <p class="subtitle">Симулятор стрельбы из лука с реалистичной физикой рэгдолла и инерцией</p>
+                
+                <!-- Main Sub-Screen -->
+                <div id="menu-main" class="menu-subscreen active">
+                    <button id="btn-random-match" class="btn-primary btn-menu" onclick="startRandomMatch()">СЛУЧАЙНЫЙ БОЙ</button>
+                    <button id="btn-choose-mode" class="btn-secondary btn-menu" onclick="showMenuPanel('menu-modes')">НАСТРОЙКИ БОЯ</button>
+                    <button id="btn-shop" class="btn-secondary btn-menu" onclick="openShopMenu()">🛒 МАГАЗИН И КАСТОМИЗАЦИЯ</button>
+                    <button id="btn-settings" class="btn-secondary btn-menu" onclick="showMenuPanel('menu-settings-panel')">НАСТРОЙКИ</button>
+                    <div class="instructions">
+                        <p><strong>Управление:</strong> Зажми ЛКМ и тяни назад, чтобы прицелиться и выстрелить.</p>
+                        <p><strong>ESC</strong> — вернуться в меню в любой момент.</p>
+                    </div>
+                </div>
+
+                <!-- Mode Selection Sub-Screen (Now Fight Settings with tabs) -->
+                <div id="menu-modes" class="menu-subscreen">
+                    <h3>НАСТРОЙКИ БОЯ</h3>
+                    <div class="shop-tabs" style="display: flex; gap: 10px; width: 100%; margin-bottom: 5px;">
+                        <button id="tab-events-btn" class="btn-secondary active-tab" style="padding: 8px; font-size: 12px;" onclick="switchModesTab('events')">Режимы игры</button>
+                        <button id="tab-platforms-btn" class="btn-secondary" style="padding: 8px; font-size: 12px;" onclick="switchModesTab('platforms')">Формы платформ</button>
+                    </div>
+
+                    <!-- Events list (visible by default) -->
+                    <div id="tab-events-content" style="width: 100%;">
+                        <div class="modes-grid">
+                            <button class="btn-mode" data-event-idx="0" onclick="toggleModeSelection(this)">Обычный раунд</button>
+                            <button class="btn-mode" data-event-idx="1" onclick="toggleModeSelection(this)">Низкая гравитация</button>
+                            <button class="btn-mode" data-event-idx="2" onclick="toggleModeSelection(this)">Штормовой ветер</button>
+                            <button class="btn-mode" data-event-idx="3" onclick="toggleModeSelection(this)">Взрывные стрелы</button>
+                            <button class="btn-mode" data-event-idx="4" onclick="toggleModeSelection(this)">Хрупкие кости</button>
+                            <button class="btn-mode" data-event-idx="5" onclick="toggleModeSelection(this)">Большие головы</button>
+                            <button class="btn-mode" data-event-idx="6" onclick="toggleModeSelection(this)">Рикошет</button>
+                            <button class="btn-mode" data-event-idx="7" onclick="toggleModeSelection(this)">Тяжелые баллисты</button>
+                            <button class="btn-mode" data-event-idx="8" onclick="toggleModeSelection(this)">Энергетический щит</button>
+                            <button class="btn-mode" data-event-idx="9" onclick="toggleModeSelection(this)">Телепорт-хаос</button>
+                            <button class="btn-mode" data-event-idx="10" onclick="toggleModeSelection(this)">Двойной залп</button>
+                            <button class="btn-mode" data-event-idx="11" onclick="toggleModeSelection(this)">Реактивная отдача</button>
+                            <button class="btn-mode" data-event-idx="12" onclick="toggleModeSelection(this)">Землетрясение</button>
+                            <button class="btn-mode" data-event-idx="13" onclick="toggleModeSelection(this)">Надувные человечки</button>
+                            <button class="btn-mode" data-event-idx="14" onclick="toggleModeSelection(this)">Ледяной шторм</button>
+                            <button class="btn-mode" data-event-idx="15" onclick="toggleModeSelection(this)">Богатырское здоровье</button>
+                        </div>
+                    </div>
+
+                    <!-- Platform types list (hidden by default) -->
+                    <div id="tab-platforms-content" style="width: 100%; display: none;">
+                        <div class="platforms-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; margin: 10px 0;">
+                            <button class="btn-secondary btn-platform selected" data-platform-type="default" onclick="selectPlatformType(this)">
+                                <div>Стандартные</div>
+                                <div style="font-size: 9px; opacity: 0.7; font-weight: normal; margin-top: 3px;">Обычные плоские</div>
+                            </button>
+                            <button class="btn-secondary btn-platform" data-platform-type="pillars" onclick="selectPlatformType(this)">
+                                <div>Тонкие столбы</div>
+                                <div style="font-size: 9px; opacity: 0.7; font-weight: normal; margin-top: 3px;">Очень узкие столбики</div>
+                            </button>
+                            <button class="btn-secondary btn-platform" data-platform-type="floating" onclick="selectPlatformType(this)">
+                                <div>Парящие островки</div>
+                                <div style="font-size: 9px; opacity: 0.7; font-weight: normal; margin-top: 3px;">Маленькие парящие блоки</div>
+                            </button>
+                            <button class="btn-secondary btn-platform" data-platform-type="bumpers" onclick="selectPlatformType(this)">
+                                <div>С бортиками</div>
+                                <div style="font-size: 9px; opacity: 0.7; font-weight: normal; margin-top: 3px;">Защитные боковые края</div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; width: 100%; margin-top: 15px;">
+                        <button id="btn-start-custom" class="btn-primary" style="background: linear-gradient(135deg, #10b981, #059669); flex: 1;" onclick="startCustomMatch()">ИГРАТЬ</button>
+                        <button class="btn-secondary" style="flex: 1;" onclick="showMenuPanel('menu-main')">НАЗАД</button>
+                    </div>
+                </div>
+
+                <!-- Shop/Customization Sub-Screen -->
+                <div id="menu-shop" class="menu-subscreen">
+                    <h3>🛒 МАГАЗИН И КАСТОМИЗАЦИЯ</h3>
+                    <div class="shop-tabs" style="display: flex; gap: 10px; width: 100%; margin-bottom: 5px;">
+                        <button id="tab-hats" class="btn-secondary active-tab" style="padding: 8px; font-size: 12px;" onclick="switchShopTab('hats')">Шляпы</button>
+                        <button id="tab-skins" class="btn-secondary" style="padding: 8px; font-size: 12px;" onclick="switchShopTab('skins')">Цвета скинов</button>
+                    </div>
+                    
+                    <!-- Shop Items Grid -->
+                    <div id="shop-items-container" class="shop-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; max-height: 220px; overflow-y: auto; padding: 5px 0;">
+                        <!-- Dynamically filled by JS -->
+                    </div>
+                    
+                    <button class="btn-back btn-secondary" onclick="showMenuPanel('menu-main')">НАЗАД</button>
+                </div>
+
+                <!-- Settings Sub-Screen -->
+                <div id="menu-settings-panel" class="menu-subscreen">
+                    <h3>НАСТРОЙКИ</h3>
+                    <div class="settings-group">
+                        <div class="setting-item">
+                            <label for="select-difficulty">Сложность ИИ:</label>
+                            <select id="select-difficulty" class="menu-select">
+                                <option value="easy">Легко</option>
+                                <option value="normal" selected>Нормально</option>
+                                <option value="hard">Сложно (Снайпер)</option>
+                            </select>
+                        </div>
+                        <div class="setting-item">
+                            <label for="select-wind">Сила ветра:</label>
+                            <select id="select-wind" class="menu-select">
+                                <option value="none">Без ветра</option>
+                                <option value="normal" selected>Стандартный</option>
+                                <option value="storm">Постоянный шторм</option>
+                            </select>
+                        </div>
+                        <div class="setting-item">
+                            <label for="select-dismember">Шанс отрыва конечностей:</label>
+                            <select id="select-dismember" class="menu-select">
+                                <option value="0">0%</option>
+                                <option value="15" selected>15% (Стандарт)</option>
+                                <option value="50">50% (Часто)</option>
+                                <option value="100">100% (Мясорубка)</option>
+                            </select>
+                        </div>
+                        <div class="setting-item">
+                            <label for="select-max-random-events">Макс. режимов в случ. бою:</label>
+                            <select id="select-max-random-events" class="menu-select">
+                                <option value="1">1 режим</option>
+                                <option value="2">До 2 режимов</option>
+                                <option value="3" selected>До 3 режимов (Стандарт)</option>
+                                <option value="5">До 5 режимов</option>
+                                <option value="10">Полный хаос (До 10)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn-back btn-secondary" onclick="showMenuPanel('menu-main')">НАЗАД</button>
+                </div>
+            </div>
+
+            <div id="screen-gameover" class="screen">
+                <h2 id="gameover-title">ПОРАЖЕНИЕ!</h2>
+                <p id="gameover-subtitle">Вражеский стрелок оказался быстрее.</p>
+                <div id="kill-streak-display" style="font-size:13px;color:#94a3b8;margin:-8px 0;"></div>
+                <button id="btn-restart" class="btn-primary" onclick="restartRound()">ПОПРОБОВАТЬ СНОВА</button>
+                <button class="btn-secondary" style="width:auto;padding:10px 28px;font-size:13px;" onclick="returnToMenu()">↩ ГЛАВНОЕ МЕНЮ</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

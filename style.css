@@ -1,0 +1,584 @@
+:root {
+    --bg-color: #0b0f19;
+    --card-bg: rgba(15, 23, 42, 0.45);
+    --border-color: rgba(255, 255, 255, 0.08);
+    --glow-color: rgba(56, 189, 248, 0.3);
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --accent: #38bdf8;
+    --accent-glow: 0 0 15px rgba(56, 189, 248, 0.5);
+    --hp-player: #10b981;
+    --hp-enemy: #ef4444;
+    --font-main: 'Outfit', sans-serif;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--bg-color);
+    font-family: var(--font-main);
+    color: var(--text-primary);
+}
+
+#game-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+}
+
+#gameCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+/* UI Overlay styling */
+#ui-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 24px;
+    pointer-events: auto; /* Active by default on start screen */
+}
+
+/* Let clicks pass to canvas during gameplay */
+#ui-overlay.playing {
+    pointer-events: none;
+}
+
+#ui-overlay.playing * {
+    pointer-events: none;
+}
+
+/* Re-enable pointer events for interactive HUD elements during gameplay */
+#ui-overlay.playing .wind-indicator,
+#ui-overlay.playing .score-card,
+#ui-overlay.playing .brand {
+    pointer-events: auto;
+}
+
+/* Header style */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.brand {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    background: linear-gradient(135deg, #38bdf8, #818cf8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.3));
+}
+
+.wind-indicator {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 10px 20px;
+    border-radius: 30px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.event-container {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25));
+    border: 1px solid rgba(168, 85, 247, 0.4);
+    box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
+    padding: 8px 24px;
+    border-radius: 16px;
+    text-align: center;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    animation: pulseGlow 3s infinite ease-in-out;
+}
+
+#event-name {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    color: #e9d5ff;
+}
+
+#event-desc {
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+@keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 10px rgba(168, 85, 247, 0.2); border-color: rgba(168, 85, 247, 0.3); }
+    50% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.6); border-color: rgba(168, 85, 247, 0.7); }
+}
+
+.wind-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 1px;
+}
+
+#wind-value {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--accent);
+}
+
+.wind-arrow-container {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#wind-arrow {
+    font-size: 18px;
+    color: var(--accent);
+    transform: rotate(0deg);
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-block;
+}
+
+/* Scores & HP Bars */
+.scores-container {
+    position: absolute;
+    top: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    pointer-events: none;
+}
+
+.score-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 12px 24px;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 200px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.score-card .label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+}
+
+.hp-bar-container {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+
+.hp-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease-out;
+}
+
+.player-card .hp-bar {
+    background: linear-gradient(90deg, #059669, var(--hp-player));
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+.enemy-card .hp-bar {
+    background: linear-gradient(90deg, #dc2626, var(--hp-enemy));
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+}
+
+.score-card .score {
+    font-size: 24px;
+    font-weight: 800;
+}
+
+.vs {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text-secondary);
+    text-shadow: 0 0 10px rgba(255,255,255,0.1);
+}
+
+/* Screen Layouts (Start / Gameover) */
+.screen {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid var(--border-color);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    padding: 40px;
+    border-radius: 24px;
+    width: 90%;
+    max-width: 560px;
+    text-align: center;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(255, 255, 255, 0.05);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -45%) scale(0.95);
+    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.screen.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+h1 {
+    font-size: 42px;
+    font-weight: 900;
+    letter-spacing: 3px;
+    background: linear-gradient(135deg, #f43f5e, #f43f5e, #fb7185);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 5px;
+}
+
+h2 {
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--accent);
+}
+
+h3 {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.instructions {
+    text-align: left;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    border-radius: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-top: 10px;
+}
+
+.instructions p {
+    margin-bottom: 8px;
+}
+
+.instructions p:last-child {
+    margin-bottom: 0;
+}
+
+/* Button style */
+.btn-primary {
+    background: linear-gradient(135deg, #38bdf8, #6366f1);
+    color: white;
+    border: none;
+    padding: 14px 40px;
+    font-size: 16px;
+    font-weight: 700;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
+    transition: all 0.2s ease;
+    letter-spacing: 1px;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(56, 189, 248, 0.6);
+    background: linear-gradient(135deg, #0ea5e9, #4f46e5);
+}
+
+.btn-primary:active {
+    transform: translateY(1px);
+}
+
+/* sub-screen active state toggled by JS */
+.menu-subscreen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    gap: 12px;
+}
+
+.menu-subscreen.active {
+    display: flex;
+}
+
+.btn-menu {
+    width: 100%;
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 14px 40px;
+    font-size: 15px;
+    font-weight: 700;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+}
+
+.btn-secondary:active {
+    transform: translateY(1px);
+}
+
+/* Modes Selection Grid layout */
+.modes-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    width: 100%;
+    margin: 10px 0;
+}
+
+.btn-mode {
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    padding: 12px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-mode:hover {
+    background: var(--glow-color);
+    color: var(--text-primary);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px var(--glow-color);
+}
+
+.btn-back {
+    width: 50%;
+    padding: 10px 20px;
+}
+
+/* Settings Form styles */
+.settings-group {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin: 10px 0;
+}
+
+.setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.menu-select {
+    background: #0f172a;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-family: var(--font-main);
+    outline: none;
+    cursor: pointer;
+    font-size: 13px;
+    width: 170px;
+}
+
+.menu-select:focus {
+    border-color: var(--accent);
+}
+
+/* Active selected mode */
+.btn-mode.selected {
+    background: var(--glow-color);
+    color: var(--text-primary);
+    border-color: var(--accent);
+    box-shadow: 0 0 14px var(--glow-color);
+}
+
+/* Allow sub-screens to scroll on short screens */
+.menu-subscreen {
+    max-height: 70vh;
+    overflow-y: auto;
+    scrollbar-width: none;
+}
+.menu-subscreen::-webkit-scrollbar { display: none; }
+
+/* Make sure game-over screen buttons are clickable only when the screen is active */
+#screen-gameover.active button,
+#screen-gameover.active .btn-primary {
+    pointer-events: auto !important;
+}
+
+/* Animate sub-screen transitions */
+.menu-subscreen.active {
+    animation: fadeSlideIn 0.25s ease;
+}
+
+@keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Shop and Customization Styles */
+.shop-tabs .btn-secondary {
+    border-radius: 8px;
+    margin-bottom: 5px;
+}
+.shop-tabs .active-tab {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #000;
+    box-shadow: var(--accent-glow);
+}
+
+.shop-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    padding: 10px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.shop-card:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.shop-card.purchased {
+    border-color: rgba(56, 189, 248, 0.3);
+}
+
+.shop-card.equipped {
+    background: rgba(56, 189, 248, 0.1);
+    border-color: var(--accent);
+    box-shadow: inset 0 0 10px rgba(56, 189, 248, 0.15);
+}
+
+.shop-item-preview {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.25);
+    font-size: 20px;
+}
+
+.shop-item-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.shop-item-price {
+    font-size: 10px;
+    color: #fbbf24;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.shop-item-status {
+    font-size: 9px;
+    text-transform: uppercase;
+    font-weight: 800;
+    letter-spacing: 1px;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.shop-card.equipped .shop-item-status {
+    color: var(--accent);
+}
+
+.shop-card.purchased:not(.equipped) .shop-item-status {
+    color: var(--text-secondary);
+}
+
+/* Adjust modes grid for more items */
+.modes-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+}
+
+.btn-platform.selected {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+}
