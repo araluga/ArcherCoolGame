@@ -1440,14 +1440,7 @@ function restartRound() {
     document.getElementById('ui-overlay').classList.add('playing');
 
     // Clear arrows
-    const constraints = Composite.allConstraints(game.engine.world);
-    constraints.forEach(c => {
-        if ((c.bodyA && c.bodyA.label === 'arrow') || (c.bodyB && c.bodyB.label === 'arrow')) {
-            Composite.remove(game.engine.world, c);
-        }
-    });
-    game.arrows.forEach(a => Composite.remove(game.engine.world, a.body));
-    game.arrows = [];
+    clearAllArrows();
     game.particles = [];
     game.killStreak = 0;
 
@@ -2199,7 +2192,7 @@ function drawMatterBodies() {
             const partsToDraw = body.parts.length > 1 ? body.parts.slice(1) : [body];
             partsToDraw.forEach(part => {
                 ctx.fillStyle = part.render.fillStyle || body.render.fillStyle || '#1e293b';
-                ctx.strokeStyle = part.render.strokeStyle || body.render.strokeStyle || strokeStyle;
+                ctx.strokeStyle = part.render.strokeStyle || body.render.strokeStyle || '#38bdf8';
                 ctx.lineWidth = part.render.lineWidth || body.render.lineWidth || 3;
                 ctx.beginPath();
                 const vertices = part.vertices;
