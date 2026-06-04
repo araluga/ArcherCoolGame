@@ -192,21 +192,40 @@ function updateGoldUI() {
 }
 
 
-// Particle generator
+// High-performance Particle static pool configuration
+const MAX_PARTICLES = 300;
+const PARTICLE_POOL = Array.from({ length: MAX_PARTICLES }, () => ({
+    active: false,
+    x: 0, y: 0, vx: 0, vy: 0, life: 0, decay: 0, size: 0, color: ''
+}));
+
 function createExplosion(x, y, color, count = 10, speed = 5) {
     for (let i = 0; i < count; i++) {
         const angle = Math.random() * Math.PI * 2;
         const s = (0.2 + Math.random() * 0.8) * speed;
-        game.particles.push({
-            x: x,
-            y: y,
-            vx: Math.cos(angle) * s,
-            vy: Math.sin(angle) * s,
-            life: 1.0,
-            decay: 0.015 + Math.random() * 0.02,
-            size: 2 + Math.random() * 4,
-            color: color
-        });
+        
+        // Find inactive particle or hijack the oldest one to prevent memory allocations
+        let p = null;
+        for (let j = 0; j < PARTICLE_POOL.length; j++) {
+            if (!PARTICLE_POOL[j].active) {
+                p = PARTICLE_POOL[j];
+                break;
+            }
+        }
+        if (!p) {
+            // Pool is full, reuse first random one
+            p = PARTICLE_POOL[Math.floor(Math.random() * MAX_PARTICLES)];
+        }
+        
+        p.active = true;
+        p.x = x;
+        p.y = y;
+        p.vx = Math.cos(angle) * s;
+        p.vy = Math.sin(angle) * s;
+        p.life = 1.0;
+        p.decay = 0.015 + Math.random() * 0.02;
+        p.size = 2 + Math.random() * 4;
+        p.color = color;
     }
 }
 
@@ -487,13 +506,17 @@ function initGame() {
     game.canvas.width = window.innerWidth;
     game.canvas.height = window.innerHeight;
 
-    // Matter.js Engine setup
+    // Matter.js Engine setup with Sleeping enabled
     game.engine = Engine.create({
+        enableSleeping: true,
         gravity: { y: CONFIG.gravity, scale: 0.001 }
     });
 
     // Create World Platforms
     generatePlatforms();
+
+    // Pre-allocate Arrow Pool
+    initArrowPool();
 
     // Spawn Player and Enemy
     spawnCharacters();
@@ -506,10 +529,6 @@ function initGame() {
 
     // Set Wind and Events
     selectRandomEvents();
-
-    // Runner setup
-    game.runner = Runner.create();
-    Runner.run(game.runner, game.engine);
 
     // Dynamic scale event listener
     window.addEventListener('resize', onWindowResize);
@@ -743,40 +762,121 @@ function onMouseUp(e) {
     }
 }
 
-// Spawns and applies physical velocity to arrows
-function fireArrow(x, y, angle, force, shooterChar) {
-    // Performance cap: remove oldest arrow if limit is reached
-    if (game.arrows.length >= 80) {
-        const oldest = game.arrows.shift();
-        
-        // Remove weld constraints associated with the oldest arrow
-        const constraints = Composite.allConstraints(game.engine.world);
-        constraints.forEach(c => {
-            if (c.bodyA === oldest.body || c.bodyB === oldest.body) {
-                Composite.remove(game.engine.world, c);
-            }
-        });
-        
-        Composite.remove(game.engine.world, oldest.body);
-    }
+const ARROW_POOL_SIZE = 80;
+const ARROW_POOL = [];
 
-    // Check if Heavy Arrows mode is active
-    const isHeavy = game.eventEffects.includes('heavy_arrows');
+function initArrowPool() {
+    ARROW_POOL.length = 0;
+    for (let i = 0; i < ARROW_POOL_SIZE; i++) {
+        const body = Bodies.rectangle(0, -9999, 30, 4, {
+            density: 0.008,
+            frictionAir: 0.01,
+            label: 'arrow',
+            isSensor: true,
+            render: { fillStyle: '#f8fafc' }
+        });
+        body.collisionFilter = { group: -1, mask: 0 };
+        Composite.add(game.engine.world, body);
+        
+        ARROW_POOL.push({
+            body: body,
+            active: false,
+            stuck: false,
+            stuckTo: null,
+            trail: [],
+            owner: null,
+            spawnTime: 0,
+            returned: false,
+            bounces: 0
+        });
+    }
+}
+
+function clearAllArrows() {
+    ARROW_POOL.forEach(deactivateArrow);
+    game.arrows = [];
+}
+
+function deactivateArrow(arrowObj) {
+    if (!arrowObj || !arrowObj.active) return;
+    arrowObj.active = false;
+    arrowObj.stuck = false;
+    arrowObj.stuckTo = null;
     
-    const arrow = Bodies.rectangle(x + Math.cos(angle) * 35, y + Math.sin(angle) * 35, isHeavy ? 36 : 30, isHeavy ? 8 : 4, {
-        density: isHeavy ? 0.09 : 0.008, // massive physical impact
-        frictionAir: 0.01,
-        label: 'arrow',
-        render: { fillStyle: isHeavy ? '#cbd5e1' : '#f8fafc' }
+    Body.setPosition(arrowObj.body, { x: 0, y: -9999 });
+    Body.setVelocity(arrowObj.body, { x: 0, y: 0 });
+    arrowObj.body.isSensor = true;
+    arrowObj.body.collisionFilter = { group: -1, mask: 0 };
+
+    const constraints = Composite.allConstraints(game.engine.world);
+    constraints.forEach(c => {
+        if (c.bodyA === arrowObj.body || c.bodyB === arrowObj.body) {
+            Composite.remove(game.engine.world, c);
+        }
     });
 
-    Body.setAngle(arrow, angle);
-    Body.setVelocity(arrow, {
+    const idx = game.arrows.indexOf(arrowObj);
+    if (idx !== -1) game.arrows.splice(idx, 1);
+}
+
+function cleanupOOB() {
+    const maxY = game.canvas.height + 600;
+    const minX = -600;
+    const maxX = game.canvas.width + 600;
+    
+    for (let i = game.arrows.length - 1; i >= 0; i--) {
+        const arrowObj = game.arrows[i];
+        if (arrowObj && arrowObj.active && !arrowObj.stuck) {
+            const pos = arrowObj.body.position;
+            if (pos.y > maxY || pos.x < minX || pos.x > maxX) {
+                deactivateArrow(arrowObj);
+            }
+        }
+    }
+}
+
+// Spawns and applies physical velocity to arrows from the pool
+function fireArrow(x, y, angle, force, shooterChar) {
+    let arrowObj = ARROW_POOL.find(a => !a.active);
+    if (!arrowObj) {
+        arrowObj = ARROW_POOL.reduce((oldest, current) => {
+            if (!oldest || current.spawnTime < oldest.spawnTime) return current;
+            return oldest;
+        }, null);
+        deactivateArrow(arrowObj);
+    }
+
+    const isHeavy = game.eventEffects.includes('heavy_arrows');
+    const body = arrowObj.body;
+
+    Body.setPosition(body, { x: x + Math.cos(angle) * 35, y: y + Math.sin(angle) * 35 });
+    Body.setAngle(body, angle);
+    Body.setVelocity(body, {
         x: Math.cos(angle) * force,
         y: Math.sin(angle) * force
     });
+    Body.setAngularVelocity(body, 0);
 
-    // Reactive Recoil implementation (significantly reduced recoil for better control)
+    Body.setDensity(body, isHeavy ? 0.09 : 0.008);
+    body.isSensor = false;
+    body.render.fillStyle = isHeavy ? '#cbd5e1' : '#f8fafc';
+
+    const group = shooterChar && shooterChar.parts && shooterChar.parts.head ? shooterChar.parts.head.collisionFilter.group : 0;
+    body.collisionFilter = { group: group, mask: 0xFFFFFFFF };
+
+    arrowObj.active = true;
+    arrowObj.stuck = false;
+    arrowObj.stuckTo = null;
+    arrowObj.trail = [];
+    arrowObj.owner = shooterChar;
+    arrowObj.spawnTime = Date.now();
+    arrowObj.returned = false;
+    arrowObj.bounces = 0;
+
+    if (!game.arrows.includes(arrowObj)) {
+        game.arrows.push(arrowObj);
+    }
+
     if (game.eventEffects.includes('recoil') && shooterChar && shooterChar.parts && shooterChar.parts.torso) {
         const torso = shooterChar.parts.torso;
         Body.applyForce(torso, torso.position, {
@@ -784,17 +884,6 @@ function fireArrow(x, y, angle, force, shooterChar) {
             y: -Math.sin(angle) * force * 0.0008 * torso.mass
         });
     }
-
-    Composite.add(game.engine.world, arrow);
-    game.arrows.push({
-        body: arrow,
-        stuck: false,
-        stuckTo: null,
-        trail: [],
-        owner: shooterChar,
-        spawnTime: Date.now(),
-        returned: false
-    });
 
     playSound('bow_release');
 }
@@ -1218,17 +1307,17 @@ function clearStuckArrows(char) {
     // Remove Matter constraints connecting any body part of this character to any arrow
     const constraints = Composite.allConstraints(game.engine.world);
     constraints.forEach(c => {
-        if ((c.bodyA && charParts.includes(c.bodyA)) || (c.bodyB && charParts.includes(c.bodyB))) {
+        if ((c.bodyA && charParts.includes(c.bodyA) && c.bodyB.label === 'arrow') || 
+            (c.bodyB && charParts.includes(c.bodyB) && c.bodyA.label === 'arrow')) {
             Composite.remove(game.engine.world, c);
         }
     });
 
-    // Remove the arrow bodies themselves from the engine world and from game.arrows array
+    // Deactivate the arrows via pool
     for (let i = game.arrows.length - 1; i >= 0; i--) {
         const arrow = game.arrows[i];
         if (arrow.stuckTo && charParts.includes(arrow.stuckTo)) {
-            Composite.remove(game.engine.world, arrow.body);
-            game.arrows.splice(i, 1);
+            deactivateArrow(arrow);
         }
     }
 }
@@ -1265,15 +1354,8 @@ function spawnNewEnemy() {
     // Kill off old enemy
     if (game.enemy) Composite.remove(game.engine.world, game.enemy.composite);
 
-    // Clear all arrows and their weld constraints
-    const constraints = Composite.allConstraints(game.engine.world);
-    constraints.forEach(c => {
-        if ((c.bodyA && c.bodyA.label === 'arrow') || (c.bodyB && c.bodyB.label === 'arrow')) {
-            Composite.remove(game.engine.world, c);
-        }
-    });
-    game.arrows.forEach(a => Composite.remove(game.engine.world, a.body));
-    game.arrows = [];
+    // Clear all arrows via pool
+    clearAllArrows();
     game.particles = [];
 
     // Randomise enemy platform position (fresh layout)
@@ -1723,14 +1805,17 @@ function drawOverlay() {
         }
     });
 
-    // Draw custom Particles (Blood / Impact Sparks)
-    game.particles.forEach(p => {
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.life;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
-    });
+    // Draw custom Particles from high-performance static pool (Blood / Impact Sparks)
+    for (let i = 0; i < PARTICLE_POOL.length; i++) {
+        const p = PARTICLE_POOL[i];
+        if (p.active) {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
     ctx.globalAlpha = 1.0;
 
     // Draw Energy Shield visual arcs if shield mode is active
@@ -1828,13 +1913,33 @@ function clampToScreen(char) {
     });
 }
 
+let lastTime = 0;
+let accumulator = 0;
+const fixedTimeStep = 16.666;
+
 // Main game loop
-function updateGame() {
+function updateGame(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    let dt = timestamp - lastTime;
+    lastTime = timestamp;
+
+    // Cap dt to prevent spiral of death during heavy lag spikes
+    if (dt > 100) dt = 16.666;
+
+    accumulator += dt;
+    while (accumulator >= fixedTimeStep) {
+        Engine.update(game.engine, fixedTimeStep);
+        accumulator -= fixedTimeStep;
+    }
+
     // Process arrow physics & trails
     processArrows();
 
     // Process AI aiming animations
     updateAiAiming();
+
+    // OOB Cleanup
+    cleanupOOB();
 
     // Earthquake / Unstable Ground Event
     if (game.eventEffects.includes('earthquake') && game.platforms[0] && game.platforms[1]) {
@@ -1857,8 +1962,6 @@ function updateGame() {
         Body.setAngle(enemyPlat, eAngle);
     }
 
-
-
     // Stabilize characters so they stand upright
     if (game.player) {
         keepUpright(game.player);
@@ -1869,15 +1972,17 @@ function updateGame() {
         clampToScreen(game.enemy);
     }
 
-    // Process particles lifetime
-    for (let i = game.particles.length - 1; i >= 0; i--) {
-        const p = game.particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vy += 0.08; // Small gravity on particles
-        p.life -= p.decay;
-        if (p.life <= 0) {
-            game.particles.splice(i, 1);
+    // Process active particles in-place from our static pool (no GC garbage creation)
+    for (let i = 0; i < PARTICLE_POOL.length; i++) {
+        const p = PARTICLE_POOL[i];
+        if (p.active) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.08; // Small gravity on particles
+            p.life -= p.decay;
+            if (p.life <= 0) {
+                p.active = false;
+            }
         }
     }
 
